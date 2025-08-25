@@ -1,4 +1,4 @@
-=== raidhelper 
+### raidhelper 
 
 raidhelper is just a tool I put together to adjust the speed of raid check or rebuild.
 
