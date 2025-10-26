@@ -18,7 +18,7 @@ const (
 	speedLimitPath = "/proc/sys/dev/raid/speed_limit_max"
 	mdstatPath     = "/proc/mdstat"
 	syncActionPath = "/sys/block/md0/md/sync_action"
-	
+
 	normalSpeed = "200000"
 	highSpeed   = "2000000"
 	lowSpeed    = "3000"
@@ -45,6 +45,52 @@ func getMdChecking() (int, error) {
 	}
 
 	return count, nil
+}
+
+// getMdProgress extracts the progress percentage from mdstat
+func getMdProgress() (float64, error) {
+	file, err := os.Open(mdstatPath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to open %s: %w", mdstatPath, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "check") || strings.Contains(line, "resync") {
+			// Look for progress pattern like [====>......]
+			progressRe := regexp.MustCompile(`\[([=>\.]+)\]`)
+			matches := progressRe.FindStringSubmatch(line)
+			if len(matches) > 1 {
+				progress := matches[1]
+				completed := strings.Count(progress, "=") + strings.Count(progress, ">")
+				total := len(progress)
+				return float64(completed) / float64(total) * 100, nil
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return 0, fmt.Errorf("failed to read %s: %w", mdstatPath, err)
+	}
+
+	return 0, fmt.Errorf("no progress information found")
+}
+
+// drawProgressBar creates a progress bar string with the given percentage
+func drawProgressBar(percent float64, width int) string {
+	completed := int(float64(width) * percent / 100)
+	remaining := width - completed
+
+	bar := strings.Repeat("=", completed)
+	if remaining > 0 {
+		bar += ">"
+		remaining--
+	}
+	bar += strings.Repeat(".", remaining)
+
+	return fmt.Sprintf("[%s] %.1f%%", bar, percent)
 }
 
 // getMdTimeLeft extracts the time left from mdstat
@@ -184,6 +230,37 @@ func main() {
 		},
 	}
 
+	var progressCmd = &cobra.Command{
+		Use:   "progress",
+		Short: "Show RAID check progress with a progress bar",
+		Run: func(cmd *cobra.Command, args []string) {
+			count, err := getMdChecking()
+			if err != nil {
+				log.Fatalf("Error checking RAID status: %v", err)
+			}
+
+			if count == 0 {
+				fmt.Println("No RAID check in progress")
+				return
+			}
+
+			progress, err := getMdProgress()
+			if err != nil {
+				log.Fatalf("Error getting progress: %v", err)
+			}
+
+			timeLeft, err := getMdTimeLeft()
+			if err != nil {
+				log.Printf("Error getting time left: %v", err)
+			}
+
+			fmt.Println(drawProgressBar(progress, 50))
+			if timeLeft != "" {
+				fmt.Printf("Time remaining: %s\n", timeLeft)
+			}
+		},
+	}
+
 	var rebootCmd = &cobra.Command{
 		Use:   "reboot",
 		Short: "Reboot the machine once the RAID check is done",
@@ -203,7 +280,7 @@ func main() {
 		},
 	}
 
-	rootCmd.AddCommand(normalCmd, highCmd, lowCmd, stopCmd, startCmd, checkCmd, rebootCmd, forceRebootCmd)
+	rootCmd.AddCommand(normalCmd, highCmd, lowCmd, stopCmd, startCmd, checkCmd, progressCmd, rebootCmd, forceRebootCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -213,7 +290,7 @@ func main() {
 
 func showStatus() {
 	fmt.Println("############################")
-	
+
 	isChecking, err := getMdChecking()
 	if err != nil {
 		log.Printf("Error checking RAID status: %v", err)
@@ -221,6 +298,10 @@ func showStatus() {
 		fmt.Println("# Currently Checking Raid  #")
 		if timeLeft, err := getMdTimeLeft(); err == nil && timeLeft != "" {
 			fmt.Printf("# Time left %-14s #\n", timeLeft)
+		}
+		if progress, err := getMdProgress(); err == nil {
+			progressBar := drawProgressBar(progress, 20)
+			fmt.Printf("# %-24s #\n", progressBar)
 		}
 	}
 
@@ -243,7 +324,8 @@ func showStatus() {
 	fmt.Println("check       - Returns >0 if the raid is checking")
 	fmt.Println("normal      - Set speed normal")
 	fmt.Println("high        - Set speed high")
-	fmt.Println("low         - Set speed low")
+	fmt.Println("low        - Set speed low")
+	fmt.Println("progress    - Show RAID check progress")
 	fmt.Println("reboot      - Reboot the machine once the raid check is done")
 	fmt.Println("forcereboot - Stop raid check and reboot")
 	fmt.Println("stop        - Stop raid check")
@@ -264,20 +346,24 @@ func waitForRaidAndReboot(forced bool) {
 		}
 
 		time.Sleep(100 * time.Second)
-		
+
 		// Clear screen (simple version)
 		fmt.Print("\033[2J\033[H")
-		
+
 		timeLeft, err := getMdTimeLeft()
 		if err != nil {
 			log.Printf("Error getting time left: %v", err)
 		}
-		
+
 		fmt.Println(time.Now().Format("Mon Jan 2 15:04:05 MST 2006"))
 		if timeLeft != "" {
 			fmt.Printf("Reboot will occur in %s\n", timeLeft)
 		} else {
 			fmt.Println("Reboot will occur when RAID check completes")
+		}
+
+		if progress, err := getMdProgress(); err == nil {
+			fmt.Println(drawProgressBar(progress, 50))
 		}
 	}
 
