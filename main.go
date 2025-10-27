@@ -279,8 +279,16 @@ func main() {
 			waitForRaidAndReboot(true)
 		},
 	}
+	
+	var showStatusOnlyCmd = &cobra.Command{
+		Use:   "showstatus",
+		Short: "Shows the status without the list of commands",
+		Run: func(cmd *cobra.Command, args []string) {
+			showOnlyStatus()
+		},
+	}
 
-	rootCmd.AddCommand(normalCmd, highCmd, lowCmd, stopCmd, startCmd, checkCmd, progressCmd, rebootCmd, forceRebootCmd)
+	rootCmd.AddCommand(normalCmd, highCmd, lowCmd, stopCmd, startCmd, checkCmd, progressCmd, rebootCmd, forceRebootCmd, showStatusOnlyCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -288,16 +296,47 @@ func main() {
 	}
 }
 
-func showStatus() {
-	fmt.Println("############################")
 
+func showOnlyStatus() { 
+	fmt.Println("###############################")
+	currentTime := time.Now()
+	fmt.Println("#", currentTime.Format("2006-01-02 15:04:03"), "        #")
 	isChecking, err := getMdChecking()
 	if err != nil {
 		log.Printf("Error checking RAID status: %v", err)
 	} else if isChecking > 0 {
-		fmt.Println("# Currently Checking Raid  #")
+		fmt.Println("# Currently Checking RAID         #")
 		if timeLeft, err := getMdTimeLeft(); err == nil && timeLeft != "" {
-			fmt.Printf("# Time left %-14s #\n", timeLeft)
+			fmt.Printf("# Time left %-18s #\n", timeLeft)
+		}
+	}
+	speed, err := getCurrentSpeed()
+	if err != nil {
+	        log.Printf("Error reading current speed: %v", err)
+	} else {
+	        switch speed {
+	        case normalSpeed:
+	             fmt.Println("# Speed Normal                 #")
+                case highSpeed:
+                     fmt.Println("# Speed High                   #")
+                case lowSpeed:
+                     fmt.Println("# Speed Low                    #")
+                }
+	}
+        fmt.Println("################################")
+}
+
+func showStatus() {
+	fmt.Println("################################")
+	currentTime := time.Now()
+	fmt.Println("#", currentTime.Format("2006-01-02 15:04:03"), "         #")
+	isChecking, err := getMdChecking()
+	if err != nil {
+		log.Printf("Error checking RAID status: %v", err)
+	} else if isChecking > 0 {
+		fmt.Println("# Currently Checking Raid      #")
+		if timeLeft, err := getMdTimeLeft(); err == nil && timeLeft != "" {
+			fmt.Printf("# Time left %-18s #\n", timeLeft)
 		}
 		if progress, err := getMdProgress(); err == nil {
 			progressBar := drawProgressBar(progress, 20)
@@ -311,15 +350,15 @@ func showStatus() {
 	} else {
 		switch speed {
 		case normalSpeed:
-			fmt.Println("# Speed Normal             #")
+			fmt.Println("# Speed Normal                 #")
 		case highSpeed:
-			fmt.Println("# Speed High               #")
+			fmt.Println("# Speed High                   #")
 		case lowSpeed:
-			fmt.Println("# Speed Low                #")
+			fmt.Println("# Speed Low                    #")
 		}
 	}
 
-	fmt.Println("############################")
+	fmt.Println("################################")
 	fmt.Println("Available commands:")
 	fmt.Println("check       - Returns >0 if the raid is checking")
 	fmt.Println("normal      - Set speed normal")
