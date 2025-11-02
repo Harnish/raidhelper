@@ -359,16 +359,16 @@ func showStatus() {
 	}
 
 	fmt.Println("################################")
-	fmt.Println("Available commands:")
+/*	fmt.Println("Available commands:")
 	fmt.Println("check       - Returns >0 if the raid is checking")
 	fmt.Println("normal      - Set speed normal")
 	fmt.Println("high        - Set speed high")
-	fmt.Println("low        - Set speed low")
+	fmt.Println("low         - Set speed low")
 	fmt.Println("progress    - Show RAID check progress")
 	fmt.Println("reboot      - Reboot the machine once the raid check is done")
 	fmt.Println("forcereboot - Stop raid check and reboot")
 	fmt.Println("stop        - Stop raid check")
-	fmt.Println("start       - Start raid check")
+	fmt.Println("start       - Start raid check")*/
 }
 
 func waitForRaidAndReboot(forced bool) {
